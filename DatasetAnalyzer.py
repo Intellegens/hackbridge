@@ -355,7 +355,7 @@ self.params = [
 for param in self.params:
     param.update({
         'features': [None, StandardScaler()],
-        'bagging__n_estimators':  [100],
+        'bagging__n_estimators':  [10],
         'bagging__max_samples': [0.7],
         'bagging__bootstrap': [True],
         'bagging__n_jobs': [-1],
