@@ -439,6 +439,8 @@ for param in self.params:
 
         if iterations == None:
             iterations = BasicAnalyzer.iterations
+        else:
+            BasicAnalyzer.iterations = iterations
 
         ds.fillMissingValues(np.average, features)
         self.imputed_std = pd.DataFrame(np.array([None]*(ds.shape[0]*ds.shape[1])).reshape(ds.shape[0], ds.shape[1]))

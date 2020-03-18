@@ -62,10 +62,10 @@ def chooseMenu(choice):
     frames['main'].grid_columnconfigure(0, minsize=10, weight=1)
     frames['main'].grid_rowconfigure(0, minsize=10, weight=1)
 
-    if choice == "basic":
-        loadBasic()
-    elif choice == "comparison":
-        loadComparison()
+    if choice == "models":
+        loadModels()
+    elif choice == "missing_vals":
+        load_missing_vals()
     elif choice == "execute":
         loadExecute()
     elif choice == "outliers":
@@ -103,14 +103,16 @@ def chooseData(value):
 state_explore = ''
 def chooseExplore(choice):
     print("comparison.chooseExplore")
-    global analyzer_basic, state_explore, canvas_widget
+    global analyzer_basic, state_explore, canvas_widget, test
     if choice == "densities":
         if state_explore != 'density':
             explore['widgets']['info'].grid_forget()
             explore['widgets']['feature'].grid(row=0, column=0, sticky='nsew')
             explore['widgets']['feature']['menu'].delete(0, 'end')
-            for feature in (BasicAnalyzer.train.getFeatures() if BasicAnalyzer.train is not None else []):
+            features = BasicAnalyzer.train.getFeatures() if BasicAnalyzer.train is not None else []
+            for feature in features:
                 explore['widgets']['feature']['menu'].add_command(label=feature, command=tk._setit(explore['values']['feature'], feature))
+            explore['values']['feature'].set(features[0])
         chooseExplore2()
         state_explore = 'density'
     else:
@@ -120,19 +122,22 @@ def chooseExplore(choice):
                 canvas_widget.destroy()
             explore['widgets']['info'].grid(row=0, column=0, sticky='nsew')
             explore['widgets']['main'].grid_rowconfigure(0, minsize=200, weight=1)
+            explore['widgets']['main'].grid_rowconfigure(1, minsize=0, weight=0)
             explore['widgets']['main'].grid_columnconfigure(0, minsize=200, weight=1)
+            explore['widgets']['main'].grid_columnconfigure(1, minsize=0, weight=0)
             state_explore = 'info'
+
         if choice == "dimensions":
             explore['widgets']['info'].delete(1.0, tk.END)
-            explore['values']['info'] = analyzer_basic.printDimensions()
+            explore['values']['info'] = analyzer_basic.printDimensions(test)
             explore['widgets']['info'].insert(tk.END, explore['values']['info'])
         if choice == "missing_vals":
             explore['widgets']['info'].delete(1.0, tk.END)
-            explore['values']['info'] = analyzer_basic.printMissingValues()
+            explore['values']['info'] = analyzer_basic.printMissingValues(test)
             explore['widgets']['info'].insert(tk.END, explore['values']['info'])
         if choice == "basic_stats":
             explore['widgets']['info'].delete(1.0, tk.END)
-            explore['values']['info'] = analyzer_basic.printBasicStats()
+            explore['values']['info'] = analyzer_basic.printBasicStats(test)
             explore['widgets']['info'].insert(tk.END, explore['values']['info'])
 
 canvas_widget = None
@@ -162,25 +167,25 @@ def chooseExplore2(*args):
 
 
 
-# FUNCTIONALITY - "Basic" Frame
+# FUNCTIONALITY - "Models" Frame
 
-def loadBasic():
-    print("comparison.loadBasic")
+def loadModels():
+    print("comparison.loadModels")
     global analyzer_alchemite
 
     text = ""
-    if len(analyzer_basic.gcvs["models"]) != 0 and basic['values']['feature'].get() != "":
-        text += analyzer_basic.getFeatureModelDescription(basic['values']['feature'].get())
-    basic['widgets']['info'].delete(1.0, tk.END)
-    basic['values']['info'] = text
-    basic['widgets']['info'].insert(tk.END, basic['values']['info'])
+    if len(analyzer_basic.gcvs["models"]) != 0 and models['values']['feature'].get() != "":
+        text += analyzer_basic.getFeatureModelDescription(models['values']['feature'].get())
+    models['widgets']['info'].delete(1.0, tk.END)
+    models['values']['info'] = text
+    models['widgets']['info'].insert(tk.END, models['values']['info'])
 
-    basic['widgets']['feature']['menu'].delete(0, 'end')
+    models['widgets']['feature']['menu'].delete(0, 'end')
     for feature in (BasicAnalyzer.train.getFeatures() if BasicAnalyzer.train is not None else []):
-        basic['widgets']['feature']['menu'].add_command(label=feature, command=tk._setit(basic['values']['feature'], feature))
+        models['widgets']['feature']['menu'].add_command(label=feature, command=tk._setit(models['values']['feature'], feature))
 
 
-def chooseBasic(choice):
+def chooseModels(choice):
     global analyzer_basic, analyzer_alchemite
     text = ""
     if choice == 'train':
@@ -196,48 +201,48 @@ def chooseBasic(choice):
         filename = filedialog.asksaveasfilename(initialdir=".", title="Save {}".format("Model"))
         analyzer_basic.saveGCV(filename)
     elif choice == 'set_params':
-        feature = basic['values']['feature'].get()
+        feature = models['values']['feature'].get()
         if feature:
-            param_code = basic['widgets']['info'].get(1.0,'end')
+            param_code = models['widgets']['info'].get(1.0,'end')
             analyzer_basic.params_code.update({feature: param_code})
 
-    basic['widgets']['feature']['menu'].delete(0, 'end')
+    models['widgets']['feature']['menu'].delete(0, 'end')
     for feature in (BasicAnalyzer.train.getFeatures() if BasicAnalyzer.train is not None else []):
-        basic['widgets']['feature']['menu'].add_command(label=feature, command=tk._setit(basic['values']['feature'], feature))
-    chooseBasic2()
+        models['widgets']['feature']['menu'].add_command(label=feature, command=tk._setit(models['values']['feature'], feature))
+    chooseModels2()
 
 
-def chooseBasic2(*args):
+def chooseModels2(*args):
     global analyzer_basic
     text = ""
-    feature = basic['values']['feature'].get()
-    show = basic['values']['show'].get()
+    feature = models['values']['feature'].get()
+    show = models['values']['show'].get()
 
     if show != "Model":
         text += analyzer_basic.gcvs["params"][feature] if feature in analyzer_basic.gcvs["params"] else ""
     else:
         text += analyzer_basic.getFeatureModelDescription(feature) if feature in analyzer_basic.gcvs["models"] else ""
 
-    basic['widgets']['info'].delete(1.0, tk.END)
-    basic['values']['info'] = text
-    basic['widgets']['info'].insert(tk.END, basic['values']['info'])
+    models['widgets']['info'].delete(1.0, tk.END)
+    models['values']['info'] = text
+    models['widgets']['info'].insert(tk.END, models['values']['info'])
 
-# FUNCTIONALITY - "Compare" Frame
+# FUNCTIONALITY - "Missing Values" Frame
 
-def loadComparison():
+def load_missing_vals():
     global analyzer_basic, analyzer_alchemite, test
     pass
 
 
-def chooseComparison(choice):
+def choose_missing_vals(choice):
     global analyzer_basic, analyzer_alchemite, test
 
     if choice=='compare':
-        test.getImputationTestset(comparison['values']['errors'].get())
+        test.getImputationTestset(missing_vals['values']['errors'].get())
         test_basic_imp = Dataset(test.name, "basic_imp", test.imp_test_set.copy(deep=True))
         test_alchemite_imp = Dataset(test.name, "alchemite_imp", test.imp_test_set.copy(deep=True))
 
-        analyzer_basic.iterateMissingValuePredictions(test_basic_imp, iterations=comparison['values']['iterations'].get())
+        analyzer_basic.iterateMissingValuePredictions(test_basic_imp, iterations=missing_vals['values']['iterations'].get())
         text_basic = "Basic model after {} iterations\n".format(BasicAnalyzer.iterations)
         text_basic += analyzer_basic.printImputedVsActual(test, test_basic_imp)
 
@@ -257,20 +262,20 @@ def chooseComparison(choice):
 
             analyzer_basic.iterateMissingValuePredictions(
                 test_basic_imp,
-                iterations=comparison['values']['iterations'].get(),
+                iterations=missing_vals['values']['iterations'].get(),
                 features=[feature])
             text_basic += analyzer_basic.printImputedVsActual(test, test_basic_imp, [feature], False)
 
             analyzer_alchemite.iterateMissingValuePredictions(test_alchemite_imp)
             text_alchemite += analyzer_alchemite.printImputedVsActual(test, test_alchemite_imp, [feature], False)
 
-        comparison['widgets']['info_basic'].delete(1.0, tk.END)
-        comparison['values']['info_basic'] = text_basic
-        comparison['widgets']['info_basic'].insert(tk.END, comparison['values']['info_basic'])
+        missing_vals['widgets']['info_basic'].delete(1.0, tk.END)
+        missing_vals['values']['info_basic'] = text_basic
+        missing_vals['widgets']['info_basic'].insert(tk.END, missing_vals['values']['info_basic'])
 
-        comparison['widgets']['info_alchemite'].delete(1.0, tk.END)
-        comparison['values']['info_alchemite'] = text_alchemite
-        comparison['widgets']['info_alchemite'].insert(tk.END, comparison['values']['info_alchemite'])
+        missing_vals['widgets']['info_alchemite'].delete(1.0, tk.END)
+        missing_vals['values']['info_alchemite'] = text_alchemite
+        missing_vals['widgets']['info_alchemite'].insert(tk.END, missing_vals['values']['info_alchemite'])
     elif choice =='export':
         if analyzer_basic.imputed is not None:
             filename = filedialog.asksaveasfilename(initialdir=".", title="Export Basic")
@@ -340,7 +345,7 @@ def chooseOutliers2(*args):
 
     if feature:
         if not hasattr(test, "out"):
-            _, _, test.out = analyzer_basic.findOutliers(test)
+            _, _, test.out, _ = analyzer_basic.findOutliers(test)
 
         fig = Dataset.plotDensities([test.out], features=[feature], x_range=[0.0, 1.0])
         if canvas_widget:
@@ -394,18 +399,18 @@ def outliers_yshuffle_run(choice):
             text += "\n\n{}\n".format(feature)
 
             report_feature = report.loc[report["Column"] == feature,:].copy()
-            sort_idx = np.argsort(report_feature["Standard Deviations"])
-            print("1 Idx: ")
-            print(sort_idx)
-            sort_idx = sort_idx[::-1].values
-            sort_idx = report_feature["Sample Index"].values[sort_idx]
-            print("2 Idx: ")
-            print(sort_idx)
-            print("Metrik: {}".format(risk_metrik))
-            print(report.columns)
-            for idx in sort_idx:
+
+            report_feature = report_feature.sort_values(
+                by=[risk_metrik, "Standard Deviations"],
+                ascending=[True, False]
+            )
+
+            #sort_idx = np.argsort(report_feature["Standard Deviations"])
+            #sort_idx = sort_idx[::-1].values
+            #sort_idx = report_feature["Sample Index"].values[sort_idx]
+
+            for idx in report_feature["Sample Index"]:
                 text += "* " if idx in yshuffled_idx and feature in yfeatures else "  "
-                print("Idx: {}".format(idx))
 
                 text += "{:<10s}: ".format(str(idx))
                 text += "{:>4.3f}".format(report_feature.loc[report_feature["Sample Index"] == idx, risk_metrik].values[0])
@@ -456,14 +461,11 @@ frames.update({
     'explore': tk.LabelFrame(frames['main'],
         text="Explorative analysis",
         width=width, height=(height-50)),
-    'alchemite': tk.LabelFrame(frames['main'],
-        text=version,
+    'models': tk.LabelFrame(frames['main'],
+        text="Models",
         width=width, height=(height-50)),
-    'basic': tk.LabelFrame(frames['main'],
-        text="Basic algorithms",
-        width=width, height=(height-50)),
-    'comparison': tk.LabelFrame(frames['main'],
-        text="Comparison",
+    'missing_vals': tk.LabelFrame(frames['main'],
+        text="Missing values",
         width=width, height=(height-50)),
     'outliers': tk.LabelFrame(frames['main'],
         text="Outlier detection",
@@ -519,33 +521,33 @@ explore['widgets'].update({
 })
 
 
-basic = {
+models = {
     'values': {
         'info': "",
         'feature': tk.StringVar(),
         'show': tk.StringVar(),
     }
 }
-basic.update({
+models.update({
     'widgets': {
-        'train': tk.Button(frames['basic'], text="train Basic", width=30, command=lambda: chooseBasic("train")),
-        'train_alchemite': tk.Button(frames['basic'], text="train Alchemite", width=30, command=lambda: chooseBasic("train_alchemite")),
-        'save': tk.Button(frames['basic'], text="save feature models", width=30, command=lambda: chooseBasic("save")),
-        'load': tk.Button(frames['basic'], text="load feature models", width=30, command=lambda: chooseBasic("load")),
-        'feature': tk.OptionMenu(frames['basic'],
-            basic['values']['feature'],
+        'train': tk.Button(frames['models'], text="train Basic", width=30, command=lambda: chooseModels("train")),
+        'train_alchemite': tk.Button(frames['models'], text="train Alchemite", width=30, command=lambda: chooseModels("train_alchemite")),
+        'save': tk.Button(frames['models'], text="save feature models", width=30, command=lambda: chooseModels("save")),
+        'load': tk.Button(frames['models'], text="load feature models", width=30, command=lambda: chooseModels("load")),
+        'feature': tk.OptionMenu(frames['models'],
+            models['values']['feature'],
             *(BasicAnalyzer.train.getFeatures() if BasicAnalyzer.train is not None else [""])
         ),
-        'set_params': tk.Button(frames['basic'], text="set search parameters", width=30, command=lambda: chooseBasic("set_params")),
-        'show': tk.OptionMenu(frames['basic'],
-            basic['values']['show'],
+        'set_params': tk.Button(frames['models'], text="set search parameters", width=30, command=lambda: chooseModels("set_params")),
+        'show': tk.OptionMenu(frames['models'],
+            models['values']['show'],
             *['GCV Paramters', 'Model']
         ),
-        'info': tk.Text(frames['basic'], width=160, height=50)
+        'info': tk.Text(frames['models'], width=160, height=50)
     }
 })
 
-comparison = {
+missing_vals = {
     'values': {
         'info_basic': "",
         'info_alchemite': "",
@@ -553,23 +555,23 @@ comparison = {
         'errors': tk.IntVar(),
     }
 }
-comparison.update({
+missing_vals.update({
     'widgets': {
-        'iterations_label': tk.Label(frames['comparison'], text="Iterations:", width=20, anchor='w'),
-        'iterations': tk.OptionMenu(frames['comparison'],
-            comparison['values']['iterations'],
+        'iterations_label': tk.Label(frames['missing_vals'], text="Iterations:", width=20, anchor='w'),
+        'iterations': tk.OptionMenu(frames['missing_vals'],
+            missing_vals['values']['iterations'],
             *[1, 2, 5, 10, 50, 100]
         ),
-        'errors_label': tk.Label(frames['comparison'], text="Missing values per sample: ", width=20, anchor='w'),
-        'errors': tk.OptionMenu(frames['comparison'],
-            comparison['values']['errors'],
+        'errors_label': tk.Label(frames['missing_vals'], text="Missing values per sample: ", width=20, anchor='w'),
+        'errors': tk.OptionMenu(frames['missing_vals'],
+            missing_vals['values']['errors'],
             *[1, 2, 3, 4]
         ),
-        'compare': tk.Button(frames['comparison'], text="compare methods", width=30, command=lambda: chooseComparison("compare")),
-        'export': tk.Button(frames['comparison'], text="export imputated data", width=30, command=lambda: chooseComparison("export")),
+        'compare': tk.Button(frames['missing_vals'], text="compare methods", width=30, command=lambda: choose_missing_vals("compare")),
+        'export': tk.Button(frames['missing_vals'], text="export imputated data", width=30, command=lambda: choose_missing_vals("export")),
 
-        'info_basic': tk.Text(frames["comparison"], width=80, height=50),
-        'info_alchemite': tk.Text(frames["comparison"], width=80, height=50),
+        'info_basic': tk.Text(frames["missing_vals"], width=80, height=50),
+        'info_alchemite': tk.Text(frames["missing_vals"], width=80, height=50),
     }
 })
 
@@ -627,8 +629,8 @@ menu = {
     'widgets': {
         'data': tk.Button(frames['menu'], text="Select data", command=lambda: chooseMenu("data")),
         'explore': tk.Button(frames['menu'], text="Explore data", command=lambda: chooseMenu("explore")),
-        'basic': tk.Button(frames['menu'], text="Models", command=lambda: chooseMenu("basic")),
-        'comparison': tk.Button(frames['menu'], text="Missing Values", command=lambda: chooseMenu("comparison")),
+        'models': tk.Button(frames['menu'], text="Models", command=lambda: chooseMenu("models")),
+        'missing_vals': tk.Button(frames['menu'], text="Missing Values", command=lambda: chooseMenu("missing_vals")),
         'outliers': tk.Button(frames['menu'], text="Outliers", command=lambda: chooseMenu("outliers")),
         'execute': tk.Button(frames['menu'], text="Run Code", command=lambda: chooseMenu("execute")),
     }
@@ -689,52 +691,51 @@ frames['explore'].grid_columnconfigure(3, minsize=200, weight=1)
 explore['values']['feature'].trace('w', chooseExplore2)
 
 
-# Fills the Basic choice
-basic['widgets']['train_alchemite'].grid(row=0, column=0, columnspan=3, sticky='nsew')
-basic['widgets']['train'].grid(row=1, column=0, sticky='nsew')
-basic['widgets']['save'].grid(row=1, column=1, sticky='nsew')
-basic['widgets']['load'].grid(row=1, column=2, sticky='nsew')
-basic['widgets']['feature'].grid(row=2, column=0, sticky='nsew')
-basic['widgets']['set_params'].grid(row=2, column=1, sticky='nsew')
-basic['widgets']['show'].grid(row=2, column=2, sticky='nsew')
-basic['widgets']['info'].grid(row=3, column=0, columnspan=3, sticky='nsew')
-frames['basic'].grid_rowconfigure(0, minsize=50)
-frames['basic'].grid_rowconfigure(1, minsize=50)
-frames['basic'].grid_rowconfigure(2, minsize=50)
-frames['basic'].grid_rowconfigure(3, minsize=200, weight=1)
-frames['basic'].grid_columnconfigure(0, minsize=50, weight=1)
-frames['basic'].grid_columnconfigure(1, minsize=50, weight=1)
-frames['basic'].grid_columnconfigure(2, minsize=50, weight=1)
-basic['values']['feature'].trace('w', chooseBasic2)
-basic['values']['show'].trace('w', chooseBasic2)
+# Fills the Models choice
+models['widgets']['train_alchemite'].grid(row=0, column=0, columnspan=3, sticky='nsew')
+models['widgets']['train'].grid(row=1, column=0, sticky='nsew')
+models['widgets']['save'].grid(row=1, column=1, sticky='nsew')
+models['widgets']['load'].grid(row=1, column=2, sticky='nsew')
+models['widgets']['feature'].grid(row=2, column=0, sticky='nsew')
+models['widgets']['set_params'].grid(row=2, column=1, sticky='nsew')
+models['widgets']['show'].grid(row=2, column=2, sticky='nsew')
+models['widgets']['info'].grid(row=3, column=0, columnspan=3, sticky='nsew')
+frames['models'].grid_rowconfigure(0, minsize=50)
+frames['models'].grid_rowconfigure(1, minsize=50)
+frames['models'].grid_rowconfigure(2, minsize=50)
+frames['models'].grid_rowconfigure(3, minsize=200, weight=1)
+frames['models'].grid_columnconfigure(0, minsize=50, weight=1)
+frames['models'].grid_columnconfigure(1, minsize=50, weight=1)
+frames['models'].grid_columnconfigure(2, minsize=50, weight=1)
+models['values']['feature'].trace('w', chooseModels2)
+models['values']['show'].trace('w', chooseModels2)
 
 
-# Fills the Comparison choice
-comparison['widgets']['iterations_label'].grid(row=0, column=0, sticky='nsew')
-comparison['widgets']['iterations'].grid(row=0, column=1, sticky='nsew')
-comparison['widgets']['errors_label'].grid(row=1, column=0, sticky='nsew')
-comparison['widgets']['errors'].grid(row=1, column=1, sticky='nsew')
-comparison['widgets']['compare'].grid(row=2, column=0, sticky='nsew')
-comparison['widgets']['export'].grid(row=2, column=1, sticky='nsew')
-comparison['widgets']['info_basic'].grid(row=3, column=0, sticky='nsew')
-comparison['widgets']['info_alchemite'].grid(row=3, column=1, sticky='nsew')
-frames['comparison'].grid_rowconfigure(0, minsize=50)
-frames['comparison'].grid_rowconfigure(1, minsize=50)
-frames['comparison'].grid_rowconfigure(2, minsize=50)
-frames['comparison'].grid_rowconfigure(3, minsize=200, weight=1)
-frames['comparison'].grid_columnconfigure(0, minsize=50, weight=1)
-frames['comparison'].grid_columnconfigure(1, minsize=50, weight=1)
+# Fills the Missing Values choice
+missing_vals['widgets']['iterations_label'].grid(row=0, column=0, sticky='nsew')
+missing_vals['widgets']['iterations'].grid(row=0, column=1, sticky='nsew')
+missing_vals['widgets']['errors_label'].grid(row=1, column=0, sticky='nsew')
+missing_vals['widgets']['errors'].grid(row=1, column=1, sticky='nsew')
+missing_vals['widgets']['compare'].grid(row=2, column=0, sticky='nsew')
+missing_vals['widgets']['export'].grid(row=2, column=1, sticky='nsew')
+missing_vals['widgets']['info_basic'].grid(row=3, column=0, sticky='nsew')
+missing_vals['widgets']['info_alchemite'].grid(row=3, column=1, sticky='nsew')
+frames['missing_vals'].grid_rowconfigure(0, minsize=50)
+frames['missing_vals'].grid_rowconfigure(1, minsize=50)
+frames['missing_vals'].grid_rowconfigure(2, minsize=50)
+frames['missing_vals'].grid_rowconfigure(3, minsize=200, weight=1)
+frames['missing_vals'].grid_columnconfigure(0, minsize=50, weight=1)
+frames['missing_vals'].grid_columnconfigure(1, minsize=50, weight=1)
 
 # Fills the Outliers frame
 outliers['widgets']['button_distribution'].grid(row=0, column=0, sticky='nsew')
 outliers['widgets']['button_yshuffle'].grid(row=0, column=1, sticky='nsew')
 #outliers['widgets']['button_add3sigma'].grid(row=0, column=2, sticky='nsew')
-outliers['widgets']['main'].grid(row=1, column=0, columnspan=3, sticky='nsew')
+outliers['widgets']['main'].grid(row=1, column=0, columnspan=2, sticky='nsew')
 frames['outliers'].grid_rowconfigure(0, minsize=50)
 frames['outliers'].grid_rowconfigure(1, minsize=50, weight=1)
 frames['outliers'].grid_columnconfigure(0, minsize=50, weight=1)
 frames['outliers'].grid_columnconfigure(1, minsize=50, weight=1)
-frames['outliers'].grid_columnconfigure(2, minsize=50, weight=1)
 # set distribution as the standard outliers page
 outliers['widgets']['distribution'].grid(row=0, column=0, sticky='nsew')
 # START: fill the distribution page
