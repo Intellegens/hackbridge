@@ -1,4 +1,5 @@
 from DatasetAnalyzer import Dataset, BasicAnalyzer
+import numpy as np
 import pandas as pd
 
 from io import StringIO
@@ -54,6 +55,11 @@ class AlchemiteAnalyzer(BasicAnalyzer):
         self.configuration.credentials = credentials
         api_response = self.api_default.version_get()
         print(api_response)
+
+
+    def close(self):
+        self.api_models.models_id_delete(self.model_id)
+        self.api_datasets.datasets_id_delete(BasicAnalyzer.train.dataset_id)
 
 
     def fitFeatureModels(self, features=None):
@@ -113,6 +119,7 @@ class AlchemiteAnalyzer(BasicAnalyzer):
         	time.sleep(5)
         print('Training time:', time.time()-t0)
 
+
     def iterateMissingValuePredictions(self, df, features=None):
         print("Alchemite.iterateMissingValuePredictions")
         if features == None:
@@ -150,13 +157,14 @@ class AlchemiteAnalyzer(BasicAnalyzer):
     def findOutliers(self, test):
         print("Alchemite.findOutliers")
 
+        features = BasicAnalyzer.train.getFeatures()
 
         data = test.to_csv(line_terminator="\n")
         self.dataset_outliers = client.Dataset(
             name = test.name,
             row_count = test.shape[0],
-            column_headers = BasicAnalyzer.train.getFeatures(),
-            descriptor_columns = [0]*len(BasicAnalyzer.train.getFeatures()),
+            column_headers = features,
+            descriptor_columns = [0]*len(features),
             # data = data
         )
 
@@ -193,6 +201,103 @@ class AlchemiteAnalyzer(BasicAnalyzer):
         report.to_csv("outliers_alchemite.csv")
 
 
+        test_avg = Dataset(test.name, "outlier_pc", test.loc[test.all_filled_idx, :].copy())
+        test_pc = Dataset(test.name, "outlier_pc", test.loc[test.all_filled_idx, :].copy())
+        test_std = Dataset(test.name, "outlier_pc", test.loc[test.all_filled_idx, :].copy())
+
+        file = open("debug\\findOutliers_alchemite.csv", "w")
+        file.write("{},{},{},{},{}\n".format("sample", "feature", "prediction", "more extreme", "actual value", "predictions"))
+
+        for f, feature in enumerate(features):
+            test_without_feature = Dataset(test.name, "outlier_wo_feature", test.loc[test.all_filled_idx, :].copy())
+            test_without_feature.loc[:, feature] = None
+
+            data = test_without_feature.to_csv(index=False, line_terminator="\n")
+
+            impute_request = client.ImputeRequest(
+                return_probability_distribution = True,
+                data = data,
+            )
+
+            response = self.api_models.models_id_impute_put(self.model_id,
+                impute_request=impute_request)
+
+            responseIO = StringIO(response)
+            responseDF = pd.read_csv(responseIO, header=None, sep=",", lineterminator='\n')
+            responseDF.columns = features + [feature + "_est" for feature in features]
+            responseDF.index = test_without_feature.index
+
+            for sample in test_without_feature.index:
+                predictions_split = responseDF.loc[sample, feature + "_est"]
+                predictions_split = predictions_split.split('#')
+                predictions = [float(x) for x in predictions_split]
+                prediction = np.average(predictions)
+                test_std.loc[sample, feature] = np.std(predictions)
+                predictions_norm = [np.abs(pred - prediction) for pred in predictions]
+                test_val = test.loc[sample, feature]
+                test_valn = np.abs(test_val - prediction)
+                pc = len(np.where(predictions_norm >= test_valn)[0]) / len(predictions_norm)
+                test_pc.loc[sample, feature] = pc
+                test_avg.loc[sample, feature] = prediction
+
+                file.write("{},{},{},{},{}".format(sample, feature,
+                    test_avg.loc[sample, feature], test_pc.loc[sample, feature],
+                    test_val))
+                for pred in predictions:
+                    file.write(",{}".format(pred))
+                file.write("\n")
+            # input('input something!: ')
+
+        file.close()
+        test_avg.to_csv("debug\\findOutliers_alchemite_pred_avg.csv")
 
         # return pred_bagging, test_std, test_pc
-        return report
+        return test_avg, test_std, test_pc, report
+
+
+    def predictAllEstimators(self, test):
+        print("Alchemite.predictAllEstimators")
+        features = BasicAnalyzer.train.getFeatures()
+
+        preds = []
+        preds_cnt = -1
+        pred_bagging = test.copy()
+        for feature in features:
+            test_without_feature = Dataset(test.name, "outlier_wo_feature", test.loc[test.all_filled_idx, :].copy())
+            test_without_feature.loc[:, feature] = None
+
+            data = test_without_feature.to_csv(index=False, line_terminator="\n")
+
+            impute_request = client.ImputeRequest(
+                return_probability_distribution = True,
+                data = data,
+            )
+
+            response = self.api_models.models_id_impute_put(self.model_id,
+                impute_request=impute_request)
+
+            responseIO = StringIO(response)
+            responseDF = pd.read_csv(responseIO, header=None, sep=",", lineterminator='\n')
+            responseDF.columns = features + [feature + "_est" for feature in features]
+            responseDF.index = test_without_feature.index
+
+            for sample in test_without_feature.index:
+                predictions_split = responseDF.loc[sample, feature + "_est"]
+                predictions_split = predictions_split.split('#')
+                predictions = [float(x) for x in predictions_split]
+                
+                prediction = np.average(predictions)
+                pred_bagging.loc[sample, feature] = prediction
+
+                for p, pred in enumerate(predictions):
+                    if p > preds_cnt:
+                        h = np.zeros(test.shape)
+                        h = pd.DataFrame(h)
+                        h.index = test.index
+                        h.columns = test.columns
+                        h.loc[:,:] = None
+                        preds += [h]
+                        preds_cnt += 1
+                    preds[p].loc[sample, feature] = pred
+
+        return pred_bagging, preds

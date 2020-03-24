@@ -229,7 +229,7 @@ class Dataset(pd.DataFrame):
     @staticmethod
     def plotDensities(datasets, features=None, x_range=None, y_range=None):
         if features == None:
-            features = self.getFeatures()
+            features = datasets[0].getFeatures()
 
         plot_top = 0.8
         plt.style.use('seaborn')
@@ -277,19 +277,70 @@ class BasicAnalyzer:
     features_max = None     # features in all: training, valid AND test set
     features_min = None     # features in one: training, valid OR test set
 
+    params_std = \
+"""
+# Standard Parameters
+self.params = [
+    # {
+    # 'bagging__base_estimator': [DecisionTreeRegressor()],
+    # 'bagging__base_estimator__splitter': ['random'],
+    # 'bagging__base_estimator__max_depth': [1, 3, 5, 10, 20, None]
+    # },
+    # {
+    # 'bagging__base_estimator': [KNeighborsRegressor()],
+    # 'bagging__base_estimator__n_neighbors': [2, 3, 5, 10, 20]
+    # },
+    # {
+    # 'bagging__base_estimator': [LinearRegression()],
+    # },
+    # {
+    # 'bagging__base_estimator': [SVR()],
+    # 'bagging__base_estimator__kernel': ['rbf'],
+    # 'bagging__base_estimator__C': [10, 100]
+    # },
+    {
+    'bagging__base_estimator': [xgb.sklearn.XGBRegressor()],
+    'bagging__base_estimator__max_depth': [1, 3, 5, 10, 20],
+    'bagging__base_estimator__objective': ['reg:squarederror'],
+    }
+]
+
+for param in self.params:
+    param.update({
+    'features': [None, StandardScaler()],
+    'bagging__n_estimators':  [100],
+    'bagging__max_samples': [0.1],
+    'bagging__bootstrap': [True],
+    'bagging__n_jobs': [-1],
+    })
+
+# This command will be executed to perform the grid search
+# self.pipeline = Pipeline([
+#     ('features', None),
+#     ('bagging', BaggingRegressor())
+# ])
+# gcv = GridSearchCV(self.pipeline, self.params, cv=5)
+"""
+
     iterations = 2
 
-    def __init__(self, train=None, valid=None):
-
-
+    def __init__(self, name, train=None, valid=None):
+        self.name = name
         self.gcvs = {
             "models": {}, # the grid searches
-            "params": {}  # the paramters used to perform the grid searches
+            "params": {},  # the paramters used to perform the grid searches
+            "params_std": BasicAnalyzer.params_std
         }
         self.params_code = {}
 
-        BasicAnalyzer.setTrainDS(train)
-        BasicAnalyzer.setValidDS(valid)
+        if train is not None:
+            BasicAnalyzer.setTrainDS(train)
+        if valid is not None:
+            BasicAnalyzer.setValidDS(valid)
+
+
+    def close(self):
+        pass
 
 
     @staticmethod
@@ -323,51 +374,6 @@ class BasicAnalyzer:
                     features = set(ds.getFeatures())
         BasicAnalyzer.features_min = list(features) if features is not None else []
 
-
-    @staticmethod
-    def getStandardGSCVParams():
-        return """
-self.params = [
-    {
-        'bagging__base_estimator': [DecisionTreeRegressor()],
-        'bagging__base_estimator__splitter': ['random'],
-        'bagging__base_estimator__max_depth': [1, 3, 5, 10, 20, None]
-    },
-    {
-        'bagging__base_estimator': [KNeighborsRegressor()],
-        'bagging__base_estimator__n_neighbors': [2, 3, 5, 10, 20]
-    },
-    {
-        'bagging__base_estimator': [LinearRegression()],
-    },
-    {
-        'bagging__base_estimator': [SVR()],
-        'bagging__base_estimator__kernel': ['rbf'],
-        'bagging__base_estimator__C': [10, 100]
-    },
-    {
-        'bagging__base_estimator': [xgb.sklearn.XGBRegressor()],
-        'bagging__base_estimator__max_depth': [1, 3, 5, 10, 20],
-        'bagging__base_estimator__objective': ['reg:squarederror'],
-    }
-]
-
-for param in self.params:
-    param.update({
-        'features': [None, StandardScaler()],
-        'bagging__n_estimators':  [10],
-        'bagging__max_samples': [0.7],
-        'bagging__bootstrap': [True],
-        'bagging__n_jobs': [-1],
-    })
-
-# This command will be executed to perform the grid search
-# self.pipeline = Pipeline([
-#     ('features', None),
-#     ('bagging', BaggingRegressor())
-# ])
-# gcv = GridSearchCV(self.pipeline, self.params, cv=5)
-"""
 
     def saveGCV(self, filename):
         with open(filename, 'wb') as f:
@@ -403,9 +409,9 @@ for param in self.params:
 
         print("Fitting Missing Value Model for {}".format(feature))
 
-        if not feature in self.params_code:
-            self.params_code.update({feature: BasicAnalyzer.getStandardGSCVParams()})
-        exec(self.params_code[feature])
+        if not feature in self.gcvs["params"]:
+            self.gcvs["params"].update({feature: self.gcvs["params_std"]})
+        exec(self.gcvs["params"][feature])
 
         # WARNING!!!!
         # THE FOLLOWING PIPELINE LOGIC IS EXPECTED BY OTHER PROGRAM PARTS!!!
@@ -421,7 +427,6 @@ for param in self.params:
             BasicAnalyzer.train.getFilled(feature, feature)
         )
         self.gcvs["models"].update({feature: gcv})
-        self.gcvs["params"].update({feature: self.params_code[feature]})
 
 
     def iterateMissingValuePredictions(self, ds, features=None, iterations=5):
@@ -493,7 +498,7 @@ for param in self.params:
 
 
     def findOutliers(self, test):
-        ''' for eacch value in the test set, the method returns in a Dataset
+        ''' for each value in the test set, the method returns in a Dataset
         the percentage of estimators in the Bagging object that estimated a value
         further away from the bagged value than the value in the dataset.
 
@@ -506,24 +511,24 @@ for param in self.params:
         the dataset that should be analyzed for potential outliers
         '''
 
-        file = open("debug\\findOutliers.csv", "w")
+        file = open("debug\\findOutliers_basic.csv", "w")
 
         test_pc = Dataset(test.name, "outlier_pc", test.loc[test.all_filled_idx, :].copy())
         test_std = Dataset(test.name, "outlier_pc", test.loc[test.all_filled_idx, :].copy())
 
         pred_bagging, preds = self.predictAllEstimators(test_pc)
 
-        pred_bagging.to_csv("debug\\findOutliers_pred_bagging.csv")
-        file.write("{},{},{}".format("sample", "feature", "prediction"))
+        pred_bagging.to_csv("debug\\findOutliers_basic_pred_bagging.csv")
+        file.write("{},{},{},{}".format("sample", "feature", "prediction", "more extreme"))
         pred_text = ""
         predn_text = ""
         for i, pred in enumerate(preds):
-            pred.to_csv("debug\\findOutliers_preds_{}.csv".format(i))
+            pred.to_csv("debug\\findOutliers_basic_preds_{}.csv".format(i))
             pred_text += ",{}_{}".format("pred", i)
             predn_text += ",{}_{}".format("predn", i)
 
-        file.write(",{}{}".format("test_val", pred_text))
-        file.write(",{}{}".format("test_valn", predn_text))
+        file.write(",{}{}".format("actual value", pred_text))
+        file.write(",{}{}".format("actual value n", predn_text))
         file.write("\n")
 
         features = BasicAnalyzer.train.getFeatures()
@@ -533,12 +538,13 @@ for param in self.params:
                 predictions = [x.loc[sample, feature] for _, x in enumerate(preds)]
                 test_std.loc[sample, feature] = np.std(predictions)
                 predictions_norm = [np.abs(pred - prediction) for pred in predictions]
-                test_val = test_pc.loc[sample, feature]
+                test_val = test.loc[sample, feature]
                 test_valn = np.abs(test_val - prediction)
-                pc = len(np.where(predictions_norm > test_valn)[0]) / len(predictions_norm)
+                pc = len(np.where(predictions_norm >= test_valn)[0]) / len(predictions_norm)
                 test_pc.loc[sample, feature] = pc
 
-                file.write("{},{},{}".format(sample, feature, prediction))
+                file.write("{},{},{},{}".format(sample, feature, prediction,
+                    test_pc.loc[sample, feature]))
                 pred_text = ""
                 predn_text = ""
                 for pred, predn in list(zip(predictions, predictions_norm)):
@@ -583,10 +589,16 @@ for param in self.params:
 
 
     def predictAllEstimators(self, test):
-        preds = [test.copy() for k in range(100)]
-        pred_bagging = test.copy()
-
+        print("DatasetAnalyzer.predictAllEstimators")
+        n = 0
         features = BasicAnalyzer.train.getFeatures()
+        for feature in features:
+            n = np.max([n,
+                self.gcvs["models"][feature].best_estimator_['bagging'].n_estimators])
+
+        print("n: {}".format(n))
+        preds = [test.copy() for k in range(n)]
+        pred_bagging = test.copy()
         for feature in features:
             feats = test.getFeaturesWithout([feature])
             estimator = self.gcvs["models"][feature].best_estimator_
@@ -601,17 +613,19 @@ for param in self.params:
         return pred_bagging, preds
 
 
-    def printInfo(self):
+    @staticmethod
+    def printInfo():
         ''' Prints some basic information about the dataset '''
 
         text = ""
-        text += self.printDimensions()
-        text += self.printMissingValues()
-        text += self.printBasicStats()
+        text += BasicAnalyzer.printDimensions()
+        text += BasicAnalyzer.printMissingValues()
+        text += BasicAnalyzer.printBasicStats()
         return text
 
 
-    def printDimensions(self, test=None):
+    @staticmethod
+    def printDimensions(test=None):
         ''' Prints the number of samples and features in the dataset '''
 
         text = "DIMENSIONS\n"
@@ -634,7 +648,8 @@ for param in self.params:
         return text
 
 
-    def printMissingValues(self, test=None):
+    @staticmethod
+    def printMissingValues(test=None):
         ''' Prints the number of missing values in the dataset '''
 
         text = "MISSING VALUES\n"
@@ -652,8 +667,8 @@ for param in self.params:
         print(text)
         return text
 
-
-    def printBasicStats(self, test=None):
+    @staticmethod
+    def printBasicStats(test=None):
         '''
         Prints the average value and the standard deviation for each numeric feature.
         The function just considers the entries listed in the "XYZ_filled_idx"
@@ -741,14 +756,80 @@ for param in self.params:
         return None, None
 
 
+    def print_residuals(self, test):
+        print("BasicAnalyzer.print_residuals")
+        features = BasicAnalyzer.train.getFeatures()
+        
+        text = "RESIDUALS\n\n"
+        text += "AVG and Standard Deviation\n\n"
+        text += "{:<20s} {:>20s}  {:20s} ".format("Feature", "TRAIN", "")
+        text += " {:>20s}  {:20s} ".format("TEST", "") if test is not None else ""
+        
+        datasets = [BasicAnalyzer.train]
+        datasets += [test] if test is not None else []
+
+        residuals = []
+        for ds in datasets:
+            ds_ = Dataset(ds.name, ds.type, ds.loc[ds.all_filled_idx, :].copy())               
+            pred_bagging, preds = self.predictAllEstimators(ds_)
+            preds = [pred_bagging] + preds
+            
+            res = []
+            for i, pred in enumerate(preds):
+                res_ = pred - ds_
+                res += [res_]
+                estimator_name = i - 1 if i > 0 else "Bagging"
+                res_.to_csv("debug/residuals_{}_{}.csv".format(ds.type, estimator_name))
+                pred.to_csv("debug/predicted_{}_{}.csv".format(ds.type, estimator_name))
+                
+            ds_.to_csv("debug/actual_{}.csv".format(ds.type))
+
+            residuals += [res]
+
+        # calculates the correlation between the various feature estimators
+        textcorr = "\n\nAverage Correlations between estimators' residuals"
+        textcorr += "\n{:<20s}  {:>20s}".format("Feature", "TRAIN")
+        textcorr += " {:>20s} ".format("TEST") if test is not None else ""
+        for f, feature in enumerate(features):
+            textcorr += "\n{:<20s}:".format(feature)
+            for d, ds in enumerate(datasets):
+                res = residuals[d]
+                feature_df = pd.DataFrame([x[feature] for x in res])
+                feature_df = feature_df.transpose()
+                feature_df = feature_df.corr()
+                feature_df.to_csv("debug/residuals_corr_{}_{}.csv".format(ds.type, f))
+                textcorr += " {:20.4f}".format(np.average(feature_df))
+
+        # prepares the output
+        texts = [text]
+        residuals_all_ds = list(zip(*residuals))
+        for i, dsets in enumerate(residuals_all_ds):
+            estimator_name = i - 1 if i > 0 else "Bagging"
+            text = "\n\n\nEstimator: {}\n\n".format(estimator_name)
+            for feature in features:
+                text += "\n{:<20s}".format(feature)
+                for ds in dsets:
+                    text += " {:>20.4f}".format(np.average(ds.loc[:,feature].astype('float32')))
+                    text += " ({:<.4f})".format(np.std(ds.loc[:,feature].astype('float32')))               
+            texts += [text]
+                
+        text = texts[0] + texts[1]
+        text += textcorr + "\n\n\n\n" + texts[0]
+        for t in texts[2:]:
+            text += t
+            
+        print(text)
+        return text
+
+
     def printImputedVsActual(self, df, df_imp, features=None, showheader=True):
         if features == None:
             features = BasicAnalyzer.train.getFeatures()
 
         text = ""
         if showheader:
-            text += "\n\n{:<25s} {:>20s} {:>20s}".format(
-                "Standard Error", "Model", "vs np.average")
+            text += "\n\n{:<25s} {:>20s} {:>20s} ({:<s})".format(
+                "Standard Error", "Model", "vs np.average", "R^2")
         for feature in features:
             idxs = df_imp.nans_idx[feature]
             act = df.loc[idxs, feature]
@@ -759,7 +840,8 @@ for param in self.params:
                 mse_mean = mean_squared_error(act,
                     [np.average(df_imp.getFilled(feature,
                         [feature]))]*len(act))
-                text += "\n{:<25s} {:>20.2f} {:>20.2f}".format(feature, mse**0.5, mse_mean**0.5)
+                text += "\n{:<25s} {:>20.2f} {:>20.2f} ({:<.2f})".format(
+                    feature, mse**0.5, mse_mean**0.5, 1 - (mse / mse_mean))
             else:
                 text += "\n{:<25s} {:>20.2f}".format(feature, mse**0.5)
 
