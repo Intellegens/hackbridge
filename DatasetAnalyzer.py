@@ -20,6 +20,7 @@ from scipy import stats
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
 
+
 class Dataset(pd.DataFrame):
 
     def __init__(self, name, type, df):
@@ -54,7 +55,7 @@ class Dataset(pd.DataFrame):
         self.all_filled_idx = list(idxs)
 
 
-    def getImputationTestset(self, missing_values=1, features=None):
+    def getImputationTestset(self, missing_values=1, features=None, seed=None):
         '''
         Creates another Dataset that can be used for imputation testing
         1. only the samples that have all features are considered
@@ -75,6 +76,9 @@ class Dataset(pd.DataFrame):
         if features == None:
             features = self.getFeatures()
 
+        if seed is not None:
+            np.random.seed(seed)
+
         self.imp_test_set = Dataset(self.name, 'imp_test_set',
             self.loc[self.all_filled_idx, :].copy(deep=True))
 
@@ -88,7 +92,7 @@ class Dataset(pd.DataFrame):
         return self.imp_test_set
 
 
-    def getYShuffledSet(self, yfeatures, swaps):
+    def getYShuffledSet(self, yfeatures, swaps, seed=None):
         '''
         Creates another Dataset that can be used for outlier testing
         1. only the samples that have all features are considered
@@ -115,6 +119,9 @@ class Dataset(pd.DataFrame):
 
         self.yshuffled_set = Dataset(self.name, 'yshuffled',
             self.loc[self.all_filled_idx, :].copy(deep=True))
+
+        if seed is not None:
+            np.random.seed(seed)
 
         idx = np.random.choice(self.yshuffled_set.index, 20, replace=False)
         idx_1 = idx[0:10]
@@ -387,8 +394,11 @@ for param in self.params:
         self.gcvs = pickle.load(file)
 
 
-    def fitFeatureModels(self, features=None):
+    def fitFeatureModels(self, features=None, seed=None):
         print("BasicAnalyer.fitFeatureModels")
+        if seed is not None:
+            np.random.seed(seed)
+        
         if BasicAnalyzer.train is not None:
             if features == None:
                 features = BasicAnalyzer.train.getFeatures()
@@ -687,7 +697,7 @@ for param in self.params:
             for ds in [BasicAnalyzer.train, BasicAnalyzer.valid, test]:
                 if ds is not None:
                     if (np.issubdtype(ds[feature].dtype, np.number)):
-                        text += " {:10.2f}".format(
+                        text += " {:10.3f}".format(
                             np.average(ds.getFilled(feature, [feature])))
                     else:
                         text += "           "
@@ -700,7 +710,7 @@ for param in self.params:
             for ds in [BasicAnalyzer.train, BasicAnalyzer.valid, test]:
                 if ds is not None:
                     if (np.issubdtype(ds[feature].dtype, np.number)):
-                        text += " {:10.2f}".format(
+                        text += " {:10.3f}".format(
                             np.std(ds.getFilled(feature, [feature]))[0])
                     else:
                         text += "        ---"
@@ -726,14 +736,14 @@ for param in self.params:
             mse_test, mse_test_avg = self.printFeatureModelFitSMSE(test, feature)
 
             line_est = "    {:25s} ".format(self.getEstimatorShortDescription(feature))
-            line_est += " {:10.2f}".format(mse_train) if mse_train else " ----------"
-            line_est += " {:10.2f}".format(mse_valid) if mse_valid else " ----------"
-            line_est += " {:10.2f}".format(mse_test) if mse_test else " ----------"
+            line_est += " {:10.3f}".format(mse_train) if mse_train else " ----------"
+            line_est += " {:10.3f}".format(mse_valid) if mse_valid else " ----------"
+            line_est += " {:10.3f}".format(mse_test) if mse_test else " ----------"
 
             line_avg = "    vs. mean                  "
-            line_avg += " {:10.2f}".format(mse_train_avg) if mse_train_avg else " ----------"
-            line_avg += " {:10.2f}".format(mse_valid_avg) if mse_valid_avg else " ----------"
-            line_avg += " {:10.2f}".format(mse_test_avg) if mse_test_avg else " ----------"
+            line_avg += " {:10.3f}".format(mse_train_avg) if mse_train_avg else " ----------"
+            line_avg += " {:10.3f}".format(mse_valid_avg) if mse_valid_avg else " ----------"
+            line_avg += " {:10.3f}".format(mse_test_avg) if mse_test_avg else " ----------"
 
             text += line_est
             text += line_avg
@@ -797,8 +807,10 @@ for param in self.params:
                 feature_df = pd.DataFrame([x[feature] for x in res])
                 feature_df = feature_df.transpose()
                 feature_df = feature_df.corr()
+                W = np.ones(feature_df.shape)
+                np.fill_diagonal(W, 0)
                 feature_df.to_csv("debug/residuals_corr_{}_{}.csv".format(ds.type, f))
-                textcorr += " {:20.4f}".format(np.average(feature_df))
+                textcorr += " {:20.3f}".format(np.average(feature_df, weights=W))
 
         # prepares the output
         texts = [text]
@@ -809,8 +821,8 @@ for param in self.params:
             for feature in features:
                 text += "\n{:<20s}".format(feature)
                 for ds in dsets:
-                    text += " {:>20.4f}".format(np.average(ds.loc[:,feature].astype('float32')))
-                    text += " ({:<.4f})".format(np.std(ds.loc[:,feature].astype('float32')))               
+                    text += " {:>20.3f}".format(np.average(ds.loc[:,feature].astype('float32')))
+                    text += " ({:<.3f})".format(np.std(ds.loc[:,feature].astype('float32')))               
             texts += [text]
                 
         text = texts[0] + texts[1]
@@ -835,15 +847,18 @@ for param in self.params:
             act = df.loc[idxs, feature]
             pred = df_imp.loc[idxs, feature]
 
+            act.to_csv("debug/act.csv")
+            pred.to_csv("debug/pred.csv")
+
             mse = mean_squared_error(act, pred)
             if len(idxs) < df_imp.shape[0]:
                 mse_mean = mean_squared_error(act,
                     [np.average(df_imp.getFilled(feature,
                         [feature]))]*len(act))
-                text += "\n{:<25s} {:>20.2f} {:>20.2f} ({:<.2f})".format(
+                text += "\n{:<25s} {:>20.3f} {:>20.3f} ({:<.3f})".format(
                     feature, mse**0.5, mse_mean**0.5, 1 - (mse / mse_mean))
             else:
-                text += "\n{:<25s} {:>20.2f}".format(feature, mse**0.5)
+                text += "\n{:<25s} {:>20.3f}".format(feature, mse**0.5)
 
         print(text)
         return text

@@ -1,5 +1,4 @@
 import tkinter as tk
-from tkinter import messagebox
 from tkinter import filedialog
 from tkinter.scrolledtext import ScrolledText
 
@@ -23,7 +22,7 @@ width=1500
 font_header = ('times', 20, 'bold')
 
 root = tk.Tk()
-root.title("Comparing {} to other ML algorithms".format(version))
+root.title("Comparing Alchemite to Basic Model")
 root.geometry("{}x{}+0+0".format(width, height))
 
 test = None
@@ -169,7 +168,6 @@ def chooseExplore(choice):
 canvas_widget, canvas_widget2 = None, None
 def chooseExplore2(*args):
     global test, canvas_widget
-    text = ""
     feature = explore['values']['feature'].get()
 
     if feature:
@@ -260,7 +258,11 @@ def chooseModels(choice):
 
             elif choice == 'train_basic':
                 BasicAnalyzer.train.fillMissingValues(np.average)
-                analyzer_models.fitFeatureModels()
+                try:
+                    seed = int(menu['widgets']['seed'].get())
+                except ValueError:
+                    seed = None
+                analyzer_models.fitFeatureModels(seed=seed)
                 BasicAnalyzer.train.restoreMissingValues()
 
             elif choice == 'load_basic':
@@ -331,6 +333,8 @@ def update_models_analyzer():
     for analyzer in analyzers:
         models['widgets']['analyzer']['menu'].add_command(label=analyzer.name, command=tk._setit(models['values']['analyzer'], analyzer.name))
 
+    if analyzer_models is not None:
+        models['values']['analyzer'].set(analyzer_models.name)
 
 
 # FUNCTIONALITY - "Missing Values" Frame
@@ -339,33 +343,37 @@ def load_missing_vals():
     pass
 
 
-test_basic_imp, test_alchemite_imp = None, None
+test_1_imp, test_2_imp = None, None
 def choose_missing_vals(choice):
-    global analyzer_1, analyzer_2, test, test_basic_imp, test_alchemite_imp
+    global analyzer_1, analyzer_2, test, test_1_imp, test_2_imp
 
     if choice == 'create_testset':
-        test.getImputationTestset(missing_vals['values']['errors'].get())
-        test_basic_imp = Dataset(test.name, "basic_imp",
-            test.imp_test_set.copy(deep=True))
-        test_alchemite_imp = Dataset(test.name, "alchemite_imp",
-            test.imp_test_set.copy(deep=True))
+        BasicAnalyzer.train.fillMissingValues(np.average)
+        try:
+            seed = int(menu['widgets']['seed'].get())
+        except ValueError:
+            seed = None
+        test.getImputationTestset(missing_vals['values']['errors'].get(), seed=seed)
+        test_1_imp = Dataset(test.name, "1_imp", test.imp_test_set.copy(deep=True))
+        test_2_imp = Dataset(test.name, "2_imp", test.imp_test_set.copy(deep=True))
 
     elif choice[0:6] == 'impute':
         analyzer = None
         text = ""
-        if choice[7:] == 'basic':
-            analyzer_1.iterateMissingValuePredictions(test_basic_imp,
+        if choice[7:] == '1':
+            analyzer_1.iterateMissingValuePredictions(test_1_imp,
                 iterations=missing_vals['values']['iterations'].get())
-            text += "Basic model after {} iterations\n".format(BasicAnalyzer.iterations)
-            text += analyzer_1.printImputedVsActual(test, test_basic_imp)
-            choice = 'basic'
+            text += "{}\n".format(analyzer_1.name)
+            text += analyzer_1.printImputedVsActual(test, test_1_imp)
+            choice = '1'
             analyzer = analyzer_1
 
-        elif choice[7:] == 'alchemite':
-            analyzer_2.iterateMissingValuePredictions(test_alchemite_imp)
-            text += "Alchemite\n"
-            text += analyzer_2.printImputedVsActual(test, test_alchemite_imp)
-            choice = 'alchemite'
+        elif choice[7:] == '2':
+            analyzer_2.iterateMissingValuePredictions(test_2_imp,
+                iterations=missing_vals['values']['iterations'].get())
+            text += "{}\n".format(analyzer_2.name)
+            text += analyzer_2.printImputedVsActual(test, test_2_imp)
+            choice = '2'
             analyzer = analyzer_2
 
         text += "\n\nSetting Column to None"
@@ -375,13 +383,10 @@ def choose_missing_vals(choice):
             test_imp = Dataset(test.name, "{}_imp_{}".format(choice, feature),
                 test.imp_test_set.copy(deep=True))
 
-            if choice == 'basic':
-                analyzer.iterateMissingValuePredictions(
+            analyzer.iterateMissingValuePredictions(
                     test_imp,
                     iterations=missing_vals['values']['iterations'].get(),
                     features=[feature])
-            else:
-                analyzer.iterateMissingValuePredictions(test_imp)
 
             text += analyzer.printImputedVsActual(test, test_imp, [feature], False)
 
@@ -390,13 +395,13 @@ def choose_missing_vals(choice):
         missing_vals['widgets']['info_{}'.format(choice)].insert(tk.END, missing_vals['values']['info_{}'.format(choice)])
 
     elif choice[0:6] == 'export':
-        if choice[7:] == 'basic':
+        if choice[7:] == '1':
             if analyzer_1.imputed is not None:
-                filename = filedialog.asksaveasfilename(initialdir=".", title="Export Basic")
+                filename = filedialog.asksaveasfilename(initialdir=".", title="Export 1")
                 analyzer_1.saveImputedAlchemiteFormat(filename)
-        elif choice[7:] == 'alchemite':
+        elif choice[7:] == '2':
             if analyzer_2.imputed is not None:
-                filename = filedialog.asksaveasfilename(initialdir=".", title="Export Alchemite")
+                filename = filedialog.asksaveasfilename(initialdir=".", title="Export 2")
                 analyzer_2.saveImputedAlchemiteFormat(filename)
 
 # FUNCTIONALITY - "Outlier" Frame
@@ -428,16 +433,16 @@ def chooseOutliers(choice):
         features = BasicAnalyzer.train.getFeatures()
 
         # clear the y-shuffle menu frame
-        outliers['widgets']['yshuffle_run_basic'].grid_forget()
-        outliers['widgets']['yshuffle_run_alchemite'].grid_forget()
+        outliers['widgets']['yshuffle_run_1'].grid_forget()
+        outliers['widgets']['yshuffle_run_2'].grid_forget()
         for feature, value in outliers['widgets']['yshuffle_features'].items():
             outliers['widgets']['yshuffle_features'][feature].grid_forget()
         outliers['values']['yshuffle_features'].clear()
         outliers['widgets']['yshuffle_features'].clear()
 
         outliers['widgets']['yshuffle_shuffle'].grid(row=0, column=0, sticky="nsew")
-        outliers['widgets']['yshuffle_run_basic'].grid(row=1, column=0, sticky="nsew")
-        outliers['widgets']['yshuffle_run_alchemite'].grid(row=2, column=0, sticky="nsew")
+        outliers['widgets']['yshuffle_run_1'].grid(row=1, column=0, sticky="nsew")
+        outliers['widgets']['yshuffle_run_2'].grid(row=2, column=0, sticky="nsew")
         for i, feature in enumerate(features):
             outliers['values']['yshuffle_features'].update({feature : tk.IntVar()})
             outliers['widgets']['yshuffle_features'].update(
@@ -456,20 +461,25 @@ def chooseOutliers2(*args):
     global analyzer_1, test, canvas_widget, canvas_widget2
     feature = outliers['values']['distribution_feature'].get()
 
-    if feature and analyzer_1 and analyzer_2:
-        if not hasattr(test, "out_1"):
-            _, _, test.out_1, _ = analyzer_1.findOutliers(test)
-        if not hasattr(test, "out_2"):
-            _, _, test.out_2, _ = analyzer_2.findOutliers(test)
+    if outliers['values']['distribution_dataset'].get() == "train":
+        ds = BasicAnalyzer.train
+    else:
+        ds = test
 
-        fig = Dataset.plotDensities([test.out_1], features=[feature], x_range=[0.0, 1.0])
+    if feature and analyzer_1 and analyzer_2:
+        if not hasattr(ds, "out_1"):
+            _, _, ds.out_1, _ = analyzer_1.findOutliers(ds)
+        if not hasattr(ds, "out_2"):
+            _, _, ds.out_2, _ = analyzer_2.findOutliers(ds)
+
+        fig = Dataset.plotDensities([ds.out_1], features=[feature], x_range=[0.0, 1.0])
         if canvas_widget:
             canvas_widget.destroy()
         canvas = FigureCanvasTkAgg(fig, outliers['widgets']['distribution'])
         canvas_widget = canvas.get_tk_widget()
         canvas_widget.grid(row=2, column=0, sticky='nsew')
 
-        fig2 = Dataset.plotDensities([test.out_2], features=[feature], x_range=[0.0, 1.0])
+        fig2 = Dataset.plotDensities([ds.out_2], features=[feature], x_range=[0.0, 1.0])
         if canvas_widget2:
             canvas_widget2.destroy()
         canvas2 = FigureCanvasTkAgg(fig2, outliers['widgets']['distribution'])
@@ -495,30 +505,38 @@ def outliers_yshuffle_run(choice):
             yfeatures.append(feature)
 
     if choice == 'shuffle' or yshuffled_idx is None or yshuffled is None:
-        yshuffled_idx, yshuffled = test.getYShuffledSet(yfeatures, 10)
+        try:
+            seed = int(menu['widgets']['seed'].get())
+        except ValueError:
+            seed = None
+        yshuffled_idx, yshuffled = test.getYShuffledSet(yfeatures, 10, seed)
         yshuffled_idx = [x for x, _ in yshuffled_idx]
 
 
     features_display = deepcopy(yfeatures)
     features_display += BasicAnalyzer.train.getFeaturesWithout(yfeatures)
 
-    if choice == 'alchemite' or choice == 'basic':
-        if choice == 'alchemite':
+    if choice == '1' or choice == '2':
+        if choice == '2':
             analyzer = analyzer_2
-        elif choice == 'basic':
+        elif choice == '1':
             analyzer = analyzer_1
 
         estimated, estimated_std, estimated_pc, report = analyzer.findOutliers(yshuffled)
 
+        analyzer_type = analyzer.__class__.__name__
+
         text += "1... Index\n"
         text += "2... "
-        text += "Standard deviations\n" if choice == 'alchemite' \
+        text += "Standard deviations\n" if analyzer_type == 'AlchemiteAnalyzer' \
             else "Percentage of Bagging Estimators predicting more extreme value\n"
         text += "3... Input\n"
         text += "4... Prediction\n"
         text += "5... Real value\n"
 
-        risk_metrik, risk_sort = ("Standard Deviations", False) if choice == 'alchemite' \
+
+        risk_metrik, risk_sort = ("Standard Deviations", False) \
+            if analyzer_type == 'AlchemiteAnalyzer' \
             else ("more extreme bagging estimators", True)
 
         text += "{:<10s} {:>5s} {:>16s} {:>16s} {:>16s}\n".format(
@@ -548,16 +566,16 @@ def outliers_yshuffle_run(choice):
                 text += "{:>15.3f}".format(test.loc[idx, feature])
                 text += "\n"
 
-        if choice == 'basic':
-            text = "Basic\n\n" + text
-            outliers['widgets']['yshuffle_info_basic'].delete("1.0", tk.END)
-            outliers['values']['yshuffle_info_basic'] = text
-            outliers['widgets']['yshuffle_info_basic'].insert(tk.END, outliers['values']['yshuffle_info_basic'])
-        elif choice == 'alchemite':
-            text = "Alchemite\n\n" + text
-            outliers['widgets']['yshuffle_info_alchemite'].delete("1.0", tk.END)
-            outliers['values']['yshuffle_info_alchemite'] = text
-            outliers['widgets']['yshuffle_info_alchemite'].insert(tk.END, outliers['values']['yshuffle_info_alchemite'])
+        if choice == '1':
+            text = "{}\n\n".format(analyzer_1.name) + text
+            outliers['widgets']['yshuffle_info_1'].delete("1.0", tk.END)
+            outliers['values']['yshuffle_info_1'] = text
+            outliers['widgets']['yshuffle_info_1'].insert(tk.END, outliers['values']['yshuffle_info_1'])
+        elif choice == '2':
+            text = "{}\n\n".format(analyzer_2.name) + text
+            outliers['widgets']['yshuffle_info_2'].delete("1.0", tk.END)
+            outliers['values']['yshuffle_info_2'] = text
+            outliers['widgets']['yshuffle_info_2'].insert(tk.END, outliers['values']['yshuffle_info_2'])
 
     print(text)
 
@@ -708,18 +726,19 @@ missing_vals.update({
             *[1, 2, 3, 4]
         ),
         'create_testset': tk.Button(frames['missing_vals'], text="create testset", width=30, command=lambda: choose_missing_vals("create_testset")),
-        'impute_basic': tk.Button(frames['missing_vals'], text="impute with Basic", width=30, command=lambda: choose_missing_vals("impute_basic")),
-        'impute_alchemite': tk.Button(frames['missing_vals'], text="impute with Alchemite", width=30, command=lambda: choose_missing_vals("impute_alchemite")),
-        'export_basic': tk.Button(frames['missing_vals'], text="export imputated Basic data", width=30, command=lambda: choose_missing_vals("export_basic")),
-        'export_alchemite': tk.Button(frames['missing_vals'], text="export imputated Alchemite data", width=30, command=lambda: choose_missing_vals("export_alchemite")),
-        'info_basic': ScrolledText(frames["missing_vals"], width=80, height=50),
-        'info_alchemite': ScrolledText(frames["missing_vals"], width=80, height=50),
+        'impute_1': tk.Button(frames['missing_vals'], text="impute with 1", width=30, command=lambda: choose_missing_vals("impute_1")),
+        'impute_2': tk.Button(frames['missing_vals'], text="impute with 2", width=30, command=lambda: choose_missing_vals("impute_2")),
+        'export_1': tk.Button(frames['missing_vals'], text="export imputated data 1", width=30, command=lambda: choose_missing_vals("export_1")),
+        'export_2': tk.Button(frames['missing_vals'], text="export imputated data 2", width=30, command=lambda: choose_missing_vals("export_2")),
+        'info_1': ScrolledText(frames["missing_vals"], width=80, height=50),
+        'info_2': ScrolledText(frames["missing_vals"], width=80, height=50),
     }
 })
 
 outliers = {
     'values': {
         'distribution_feature': tk.StringVar(),
+        'distribution_dataset': tk.StringVar(),
         'yshuffle_features': {}
     },
     'widgets': {
@@ -738,19 +757,21 @@ outliers['widgets'].update({
         outliers['values']['distribution_feature'],
         *(BasicAnalyzer.train.getFeatures() if BasicAnalyzer.train is not None else [""])
     ),
-    'distribution_basic': tk.Label(outliers['widgets']['distribution'], text="Basic", width=20, anchor='c'),
-    'distribution_alchemite': tk.Label(outliers['widgets']['distribution'], text="Alchemite", width=20, anchor='c'),
+    'distribution_dataset': tk.OptionMenu(outliers['widgets']['distribution'],
+        outliers['values']['distribution_dataset'],
+        *["train", "test"]
+    ),
     'yshuffle_menu': tk.LabelFrame(outliers['widgets']['yshuffle']),
     'yshuffle_info': tk.LabelFrame(outliers['widgets']['yshuffle']),
 })
 
 outliers['widgets'].update({
     'yshuffle_shuffle': tk.Button(outliers['widgets']['yshuffle_menu'], text="Shuffle", command=lambda: outliers_yshuffle_run("shuffle")),
-    'yshuffle_run_basic': tk.Button(outliers['widgets']['yshuffle_menu'], text="Run Basic", command=lambda: outliers_yshuffle_run("basic")),
-    'yshuffle_run_alchemite': tk.Button(outliers['widgets']['yshuffle_menu'], text="Run Alchemite", command=lambda: outliers_yshuffle_run("alchemite")),
+    'yshuffle_run_1': tk.Button(outliers['widgets']['yshuffle_menu'], text="Run 1", command=lambda: outliers_yshuffle_run("1")),
+    'yshuffle_run_2': tk.Button(outliers['widgets']['yshuffle_menu'], text="Run 2", command=lambda: outliers_yshuffle_run("2")),
     'yshuffle_features' : {},
-    'yshuffle_info_basic': ScrolledText(outliers['widgets']['yshuffle_info'], width=80, height=50),
-    'yshuffle_info_alchemite': ScrolledText(outliers['widgets']['yshuffle_info'], width=80, height=50),
+    'yshuffle_info_1': ScrolledText(outliers['widgets']['yshuffle_info'], width=80, height=50),
+    'yshuffle_info_2': ScrolledText(outliers['widgets']['yshuffle_info'], width=80, height=50),
 })
 
 
@@ -775,12 +796,13 @@ menu = {
 }
 menu.update({
     'widgets': {
-        'data': tk.Button(frames['menu'], text="Select data", command=lambda: chooseMenu("data")),
-        'explore': tk.Button(frames['menu'], text="Explore data", command=lambda: chooseMenu("explore")),
+        'data': tk.Button(frames['menu'], text="Select Data", command=lambda: chooseMenu("data")),
+        'explore': tk.Button(frames['menu'], text="Explore Data", command=lambda: chooseMenu("explore")),
         'models': tk.Button(frames['menu'], text="Models", command=lambda: chooseMenu("models")),
         'missing_vals': tk.Button(frames['menu'], text="Missing Values", command=lambda: chooseMenu("missing_vals")),
         'outliers': tk.Button(frames['menu'], text="Outliers", command=lambda: chooseMenu("outliers")),
         'execute': tk.Button(frames['menu'], text="Run Code", command=lambda: chooseMenu("execute")),
+        'seed': tk.Entry(frames['menu'], width=20),
 
         'analyzer_1': tk.OptionMenu(frames['menu'],
             menu['values']['analyzer_1'],
@@ -813,20 +835,29 @@ if DEBUG:
 
 
 # Fills the Menu on the top of the window
-menu['widgets']['data'].grid(row=0, column=0, sticky='nsew')
-menu['widgets']['explore'].grid(row=0, column=1, sticky='nsew')
-menu['widgets']['models'].grid(row=0, column=2, sticky='nsew')
-menu['widgets']['missing_vals'].grid(row=0, column=3, sticky='nsew')
-menu['widgets']['outliers'].grid(row=0, column=4, sticky='nsew')
-menu['widgets']['execute'].grid(row=0, column=5, sticky='nsew')
-menu['widgets']['analyzer_1'].grid(row=1, column=0, columnspan=3, sticky='nsew')
-menu['widgets']['analyzer_2'].grid(row=1, column=3, columnspan=3, sticky='nsew')
-frames['menu'].grid_columnconfigure(0, minsize=20, weight=1)
-frames['menu'].grid_columnconfigure(1, minsize=20, weight=1)
-frames['menu'].grid_columnconfigure(2, minsize=20, weight=1)
-frames['menu'].grid_columnconfigure(3, minsize=20, weight=1)
-frames['menu'].grid_columnconfigure(4, minsize=20, weight=1)
-frames['menu'].grid_columnconfigure(5, minsize=20, weight=1)
+menu['widgets']['data'].grid(row=0, column=0, columnspan=2, sticky='nsew')
+menu['widgets']['explore'].grid(row=0, column=2, columnspan=2, sticky='nsew')
+menu['widgets']['models'].grid(row=0, column=4, columnspan=2, sticky='nsew')
+menu['widgets']['missing_vals'].grid(row=0, column=6, columnspan=2, sticky='nsew')
+menu['widgets']['outliers'].grid(row=0, column=8, columnspan=2, sticky='nsew')
+menu['widgets']['execute'].grid(row=0, column=10, columnspan=2, sticky='nsew')
+menu['widgets']['seed'].grid(row=0, column=12, columnspan=2, sticky='nsew')
+menu['widgets']['analyzer_1'].grid(row=1, column=0, columnspan=7, sticky='nsew')
+menu['widgets']['analyzer_2'].grid(row=1, column=7, columnspan=7, sticky='nsew')
+frames['menu'].grid_columnconfigure(0, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(1, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(2, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(3, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(4, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(5, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(6, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(7, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(8, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(9, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(10, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(11, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(12, minsize=10, weight=1)
+frames['menu'].grid_columnconfigure(13, minsize=10, weight=1)
 frames['menu'].grid_rowconfigure(0, minsize=50, weight=1)
 frames['menu'].grid_rowconfigure(1, minsize=50, weight=1)
 menu['values']['analyzer_1'].trace('w', choose_analyzer_1)
@@ -904,12 +935,12 @@ missing_vals['widgets']['iterations'].grid(row=0, column=1, sticky='nsew')
 missing_vals['widgets']['errors_label'].grid(row=1, column=0, sticky='nsew')
 missing_vals['widgets']['errors'].grid(row=1, column=1, sticky='nsew')
 missing_vals['widgets']['create_testset'].grid(row=2, column=0, columnspan=2, sticky='nsew')
-missing_vals['widgets']['impute_basic'].grid(row=3, column=0, sticky='nsew')
-missing_vals['widgets']['impute_alchemite'].grid(row=3, column=1, sticky='nsew')
-missing_vals['widgets']['export_basic'].grid(row=4, column=0, sticky='nsew')
-missing_vals['widgets']['export_alchemite'].grid(row=4, column=1, sticky='nsew')
-missing_vals['widgets']['info_basic'].grid(row=5, column=0, sticky='nsew')
-missing_vals['widgets']['info_alchemite'].grid(row=5, column=1, sticky='nsew')
+missing_vals['widgets']['impute_1'].grid(row=3, column=0, sticky='nsew')
+missing_vals['widgets']['impute_2'].grid(row=3, column=1, sticky='nsew')
+missing_vals['widgets']['export_1'].grid(row=4, column=0, sticky='nsew')
+missing_vals['widgets']['export_2'].grid(row=4, column=1, sticky='nsew')
+missing_vals['widgets']['info_1'].grid(row=5, column=0, sticky='nsew')
+missing_vals['widgets']['info_2'].grid(row=5, column=1, sticky='nsew')
 frames['missing_vals'].grid_rowconfigure(0, minsize=50)
 frames['missing_vals'].grid_rowconfigure(1, minsize=50)
 frames['missing_vals'].grid_rowconfigure(2, minsize=50)
@@ -934,8 +965,7 @@ outliers['widgets']['distribution'].grid(row=0, column=0, sticky='nsew')
 # START: fill the distribution page
 outliers['widgets']['distribution_feature'].grid(row=0, column=0, columnspan=2, sticky='nsew')
 outliers['values']['distribution_feature'].trace('w', chooseOutliers2)
-outliers['widgets']['distribution_basic'].grid(row=1, column=0, sticky='nsew')
-outliers['widgets']['distribution_alchemite'].grid(row=1, column=1, sticky='nsew')
+outliers['widgets']['distribution_dataset'].grid(row=1, column=0, columnspan=2, sticky='nsew')
 outliers['widgets']['distribution'].grid_rowconfigure(0, minsize=50)
 outliers['widgets']['distribution'].grid_rowconfigure(1, minsize=50)
 outliers['widgets']['distribution'].grid_rowconfigure(2, minsize=50, weight=1)
@@ -944,8 +974,8 @@ outliers['widgets']['distribution'].grid_columnconfigure(1, minsize=50, weight=1
 # START: fill the outliers y-shuffle page
 outliers['widgets']['yshuffle_menu'].grid(row=0, column=0, sticky='nsew')
 outliers['widgets']['yshuffle_info'].grid(row=0, column=1, sticky='nsew')
-outliers['widgets']['yshuffle_info_basic'].grid(row=0, column=0, sticky='nsew')
-outliers['widgets']['yshuffle_info_alchemite'].grid(row=0, column=1, sticky='nsew')
+outliers['widgets']['yshuffle_info_1'].grid(row=0, column=0, sticky='nsew')
+outliers['widgets']['yshuffle_info_2'].grid(row=0, column=1, sticky='nsew')
 outliers['widgets']['yshuffle_info'].grid_rowconfigure(0, minsize=100, weight=1)
 outliers['widgets']['yshuffle_info'].grid_columnconfigure(0, minsize=100, weight=1)
 outliers['widgets']['yshuffle_info'].grid_columnconfigure(1, minsize=100, weight=1)

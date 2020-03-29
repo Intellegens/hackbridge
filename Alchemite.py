@@ -120,10 +120,10 @@ class AlchemiteAnalyzer(BasicAnalyzer):
         print('Training time:', time.time()-t0)
 
 
-    def iterateMissingValuePredictions(self, df, features=None):
+    def iterateMissingValuePredictions(self, df, features=None, iterations=5):
         print("Alchemite.iterateMissingValuePredictions")
-        if features == None:
-            features = BasicAnalyzer.train.getFeatures()
+        
+        features = BasicAnalyzer.train.getFeatures()
 
         df.restoreMissingValues()
         data = df.to_csv(index=False, line_terminator="\n")
